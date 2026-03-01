@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Configuracion {
+  id                 String   @id @default(cuid())
+  nombreOrganizacion String
+  slug               String   @unique
+  logoUrl            String?
+  tema               Json     @default("{}")
+  config             Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("configuracion")
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  nombre       String
+  passwordHash String
+  rol          Rol      @default(VIEWER)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  aplicaciones Aplicacion[]
+  paginas      Pagina[]
+
+  @@map("usuarios")
+}
+
+enum Rol {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Aplicacion {
+  id          String    @id @default(cuid())
+  nombre      String
+  slug        String    @unique
+  descripcion String?
+  tema        Json      @default("{}")
+  config      Json      @default("{}")
+  publicada   Boolean   @default(false)
+  creadoPor   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  creadoPorUsuario Usuario       @relation(fields: [creadoPor], references: [id])
+  paginas          Pagina[]
+  fuentesDatos     FuenteDatos[]
+
+  @@map("aplicaciones")
+}
+
+model Pagina {
+  id           String    @id @default(cuid())
+  aplicacionId String
+  nombre       String
+  url          String
+  permisos     Json      @default("{}")
+  esInicio     Boolean   @default(false)
+  orden        Int       @default(0)
+  creadoPor    String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  aplicacion       Aplicacion @relation(fields: [aplicacionId], references: [id])
+  creadoPorUsuario Usuario    @relation(fields: [creadoPor], references: [id])
+  filas            Fila[]
+  queries          Query[]
+
+  @@unique([aplicacionId, url])
+  @@map("paginas")
+}
+
+model Fila {
+  id        String   @id @default(cuid())
+  paginaId  String
+  columnas  Int      @default(1)
+  orden     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pagina  Pagina   @relation(fields: [paginaId], references: [id])
+  widgets Widget[]
+
+  @@map("filas")
+}
+
+model Widget {
+  id            String   @id @default(cuid())
+  filaId        String
+  columna       Int      @default(0)
+  tipo          String
+  configuracion Json     @default("{}")
+  orden         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  fila Fila @relation(fields: [filaId], references: [id])
+
+  @@map("widgets")
+}
+
+model FuenteDatos {
+  id           String     @id @default(cuid())
+  aplicacionId String
+  nombre       String
+  tipo         TipoFuente @default(REST_API)
+  config       Json       @default("{}")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  aplicacion Aplicacion @relation(fields: [aplicacionId], references: [id])
+  queries    Query[]
+
+  @@map("fuentes_datos")
+}
+
+enum TipoFuente {
+  REST_API
+  N8N
+  POSTGRES
+}
+
+model Query {
+  id               String   @id @default(cuid())
+  paginaId         String
+  fuenteId         String
+  nombre           String
+  config           Json     @default("{}")
+  ejecutarAlCargar Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  pagina Pagina      @relation(fields: [paginaId], references: [id])
+  fuente FuenteDatos @relation(fields: [fuenteId], references: [id])
+
+  @@unique([paginaId, nombre])
+  @@map("queries")
+}
