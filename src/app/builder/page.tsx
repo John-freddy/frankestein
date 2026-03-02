@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Plus, LayoutDashboard } from "lucide-react"
+import Link from "next/link"
 
 interface Aplicacion {
   id: string
@@ -68,7 +69,6 @@ export default function BuilderPage() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold">Mis Aplicaciones</h1>
@@ -82,7 +82,6 @@ export default function BuilderPage() {
         </Button>
       </div>
 
-      {/* Formulario nueva app */}
       {showForm && (
         <Card className="mb-6 border-primary/50">
           <CardHeader>
@@ -114,7 +113,6 @@ export default function BuilderPage() {
         </Card>
       )}
 
-      {/* Lista de apps */}
       {loading ? (
         <p className="text-muted-foreground">Cargando...</p>
       ) : apps.length === 0 ? (
@@ -126,17 +124,19 @@ export default function BuilderPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {apps.map((app) => (
-            <Card key={app.id} className="hover:border-primary/50 cursor-pointer transition-colors">
-              <CardHeader>
-                <CardTitle className="text-base">{app.nombre}</CardTitle>
-                <CardDescription>{app.descripcion || "Sin descripción"}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <span className={`text-xs px-2 py-1 rounded-full ${app.publicada ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                  {app.publicada ? "Publicada" : "Borrador"}
-                </span>
-              </CardContent>
-            </Card>
+            <Link key={app.id} href={`/builder/${app.slug}`}>
+              <Card className="hover:border-primary/50 cursor-pointer transition-colors h-full">
+                <CardHeader>
+                  <CardTitle className="text-base">{app.nombre}</CardTitle>
+                  <CardDescription>{app.descripcion || "Sin descripción"}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <span className={`text-xs px-2 py-1 rounded-full ${app.publicada ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                    {app.publicada ? "Publicada" : "Borrador"}
+                  </span>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
