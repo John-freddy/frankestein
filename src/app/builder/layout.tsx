@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Topbar } from "@/components/layout/topbar"
 import { SidebarNav } from "@/components/layout/sidebar-nav"
+import { useAppStore } from "@/store/useAppStore"
 
 export default function BuilderLayout({
   children,
@@ -11,6 +13,22 @@ export default function BuilderLayout({
   children: React.ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(false)
+  const { data: session } = useSession()
+  const setUsuario = useAppStore((state) => state.setUsuario)
+
+  // Sincronizar sesión de NextAuth con el store global
+  useEffect(() => {
+    if (session?.user) {
+      setUsuario({
+        id: session.user.id ?? "",
+        nombre: session.user.name ?? "",
+        email: session.user.email ?? "",
+        rol: session.user.rol ?? "viewer",
+      })
+    } else {
+      setUsuario(null)
+    }
+  }, [session, setUsuario])
 
   return (
     <TooltipProvider>

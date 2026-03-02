@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 import { Plus, FileText, Trash2, Columns2, Columns3, Square, Type, Image, Minus, MousePointer, List, X } from "lucide-react"
 
 interface Widget {
@@ -93,6 +94,9 @@ export default function AppEditorPage() {
       const pags = await res2.json()
       setPaginas(pags)
       setPaginaActiva(nueva)
+      toast.success(`Página "${nombrePagina}" creada`)
+    } else {
+      toast.error("Error al crear la página")
     }
     setCreating(false)
   }
@@ -104,7 +108,11 @@ export default function AppEditorPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     })
-    if (res.ok) fetchFilas(paginaActiva.id)
+    if (res.ok) {
+      fetchFilas(paginaActiva.id)
+    } else {
+      toast.error("Error al agregar fila")
+    }
   }
 
   async function cambiarColumnas(filaId: string, columnas: number) {
@@ -117,15 +125,19 @@ export default function AppEditorPage() {
   }
 
   async function eliminarFila(filaId: string) {
-    await fetch(`/api/filas/${filaId}`, { method: "DELETE" })
-    if (paginaActiva) fetchFilas(paginaActiva.id)
-    setWidgetSeleccionado(null)
-    setPanelDerecho(null)
+    const res = await fetch(`/api/filas/${filaId}`, { method: "DELETE" })
+    if (res.ok) {
+      if (paginaActiva) fetchFilas(paginaActiva.id)
+      setWidgetSeleccionado(null)
+      setPanelDerecho(null)
+      toast.success("Fila eliminada", { duration: 1500 })
+    } else {
+      toast.error("Error al eliminar la fila")
+    }
   }
 
   function seleccionarCelda(filaId: string, columna: number) {
     setWidgetSeleccionado({ filaId, columna })
-    // Buscar si ya hay widget en esa celda
     const fila = filas.find(f => f.id === filaId)
     const widget = fila?.widgets.find(w => w.columna === columna)
     setPanelDerecho(widget ?? null)
