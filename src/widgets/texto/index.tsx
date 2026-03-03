@@ -1,5 +1,6 @@
 // src/widgets/texto/index.tsx
 
+import React from "react"
 import { TextoConfig } from "./config"
 
 interface Props {
@@ -27,12 +28,12 @@ const alineaciones = {
 }
 
 export function WidgetTexto({ config }: Props) {
-  const Tag = config.variante as keyof JSX.IntrinsicElements
+  const Tag = config.variante as keyof React.JSX.IntrinsicElements
 
   const clases = [
-    variantes[config.variante]   ?? variantes.p,
-    colores[config.color]        ?? colores.default,
-    alineaciones[config.alineacion] ?? alineaciones.left,
+    variantes[config.variante as keyof typeof variantes]   ?? variantes.p,
+    colores[config.color as keyof typeof colores]        ?? colores.default,
+    alineaciones[config.alineacion as keyof typeof alineaciones] ?? alineaciones.left,
   ].join(" ")
 
   return <Tag className={clases}>{config.contenido}</Tag>

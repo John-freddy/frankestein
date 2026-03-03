@@ -4,11 +4,12 @@ import { auth } from "@/auth"
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const paginas = await prisma.pagina.findMany({
-      where: { aplicacionId: params.id, deletedAt: null },
+      where: { aplicacionId: id, deletedAt: null },
       orderBy: [{ esInicio: "desc" }, { orden: "asc" }],
     })
     return NextResponse.json(paginas)
@@ -19,9 +20,10 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
     if (!session?.user?.email) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
@@ -49,7 +51,7 @@ export async function POST(
       .replace(/(^-|-$)/g, "")
 
     const count = await prisma.pagina.count({
-      where: { aplicacionId: params.id, deletedAt: null },
+      where: { aplicacionId: id, deletedAt: null },
     })
 
     const pagina = await prisma.pagina.create({
@@ -59,13 +61,18 @@ export async function POST(
         esInicio: count === 0,
         orden: count,
         permisos: {},
-        aplicacion: { connect: { id: params.id } },
+        createdBy: usuario.id,
+        aplicacion: { connect: { id } },
         creadoPorUsuario: { connect: { id: usuario.id } },
       },
     })
 
     return NextResponse.json(pagina, { status: 201 })
-  } catch (error) {
-    return NextResponse.json({ error: "Error al crear página" }, { status: 500 })
+  } catch (error: any) {
+    console.error("Error creating página:", error)
+    return NextResponse.json(
+      { error: "Error al crear página", details: error.message },
+      { status: 500 }
+    )
   }
 }

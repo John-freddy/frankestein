@@ -75,42 +75,23 @@ model Pagina {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
+  // NUEVO: Estructura de layout usando react-grid-layout
+  layoutData        Json              @default("[]")  // Array de GridWidget[]
+  isDraft           Boolean           @default(true)
+  isPublished       Boolean           @default(false)
+  publishedAt       DateTime?
+  
+  // Metadata
+  createdBy         String?
+  updatedBy         String?
+
   aplicacion       Aplicacion @relation(fields: [aplicacionId], references: [id])
   creadoPorUsuario Usuario    @relation(fields: [creadoPor], references: [id])
-  filas            Fila[]
   queries          Query[]
+  jsObjects        JsObject[]
 
   @@unique([aplicacionId, url])
   @@map("paginas")
-}
-
-model Fila {
-  id        String   @id @default(cuid())
-  paginaId  String
-  columnas  Int      @default(1)
-  orden     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  pagina  Pagina   @relation(fields: [paginaId], references: [id])
-  widgets Widget[]
-
-  @@map("filas")
-}
-
-model Widget {
-  id            String   @id @default(cuid())
-  filaId        String
-  columna       Int      @default(0)
-  tipo          String
-  configuracion Json     @default("{}")
-  orden         Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  fila Fila @relation(fields: [filaId], references: [id])
-
-  @@map("widgets")
 }
 
 model FuenteDatos {
@@ -149,4 +130,19 @@ model Query {
 
   @@unique([paginaId, nombre])
   @@map("queries")
+}
+
+model JsObject {
+  id               String   @id @default(cuid())
+  paginaId         String
+  nombre           String
+  codigo           String   @default("")
+  ejecutarAlCargar Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  pagina Pagina @relation(fields: [paginaId], references: [id])
+
+  @@unique([paginaId, nombre])
+  @@map("js_objects")
 }

@@ -1,0 +1,183 @@
+/* ============================================
+   Widget Toolbar - Panel lateral de widgets
+   ============================================ */
+
+.widget-toolbar {
+  width: 280px;
+  background-color: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+  margin-bottom: 8px;
+}
+
+/* Widget buttons */
+.widget-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.widget-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.widget-btn:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.widget-btn:active {
+  background-color: #e5e7eb;
+  transform: scale(0.98);
+}
+
+.widget-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background-color: #3b82f6;
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.widget-label {
+  flex: 1;
+  text-align: left;
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-btn {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: #ffffff;
+}
+
+.action-btn:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.duplicate-btn {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.duplicate-btn:hover {
+  background-color: #f0fdf4;
+  border-color: #059669;
+  color: #059669;
+}
+
+.delete-btn {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.delete-btn:hover {
+  background-color: #fef2f2;
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .widget-toolbar {
+    width: 240px;
+    padding: 16px 12px;
+  }
+
+  .toolbar-title {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .widget-toolbar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    max-height: auto;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .toolbar-section {
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .toolbar-title {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .widget-buttons,
+  .action-buttons {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .widget-btn,
+  .action-btn {
+    flex: 1;
+    justify-content: center;
+    min-width: 100px;
+  }
+
+  .widget-label {
+    display: none;
+  }
+
+  .widget-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+}

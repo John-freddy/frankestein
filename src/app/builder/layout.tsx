@@ -20,10 +20,10 @@ export default function BuilderLayout({
   useEffect(() => {
     if (session?.user) {
       setUsuario({
-        id: session.user.id ?? "",
+        id: (session.user as any).id ?? "",
         nombre: session.user.name ?? "",
         email: session.user.email ?? "",
-        rol: session.user.rol ?? "viewer",
+        rol: (session.user as any).rol ?? "viewer",
       })
     } else {
       setUsuario(null)
