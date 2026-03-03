@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { Plus, FileText, Trash2, Columns2, Columns3, Square, Type, Image, Minus, MousePointer, List, X } from "lucide-react"
+import { WIDGETS, TipoWidget } from "@/widgets/registro"
+import { WidgetTexto } from "@/widgets/texto"
 
 interface Widget {
   id: string
@@ -36,15 +38,23 @@ interface Aplicacion {
 }
 
 const WIDGETS_CATALOGO = [
-  { tipo: "texto", label: "Texto", icon: Type, categoria: "Básico" },
-  { tipo: "imagen", label: "Imagen", icon: Image, categoria: "Básico" },
-  { tipo: "separador", label: "Separador", icon: Minus, categoria: "Básico" },
-  { tipo: "boton", label: "Botón", icon: MousePointer, categoria: "Básico" },
-  { tipo: "selector", label: "Selector", icon: List, categoria: "Básico" },
+  { tipo: "texto",     label: "Texto",     icon: Type,         categoria: "Basico" },
+  { tipo: "imagen",    label: "Imagen",    icon: Image,        categoria: "Basico" },
+  { tipo: "separador", label: "Separador", icon: Minus,        categoria: "Basico" },
+  { tipo: "boton",     label: "Boton",     icon: MousePointer, categoria: "Basico" },
+  { tipo: "selector",  label: "Selector",  icon: List,         categoria: "Basico" },
 ]
 
+function RenderWidget({ widget }: { widget: Widget }) {
+  if (widget.tipo === "texto") {
+    return <WidgetTexto config={widget.configuracion} />
+  }
+  return <span className="text-xs text-muted-foreground italic">{widget.tipo}</span>
+}
+
 export default function AppEditorPage() {
-  const { slug } = useParams<{ slug: string }>()
+  const params = useParams()
+  const slug = params.slug as string
   const [app, setApp] = useState<Aplicacion | null>(null)
   const [paginas, setPaginas] = useState<Pagina[]>([])
   const [paginaActiva, setPaginaActiva] = useState<Pagina | null>(null)
@@ -95,9 +105,9 @@ export default function AppEditorPage() {
       const pags = await res2.json()
       setPaginas(pags)
       setPaginaActiva(nueva)
-      toast.success(`Página "${nombrePagina}" creada`)
+      toast.success("Pagina creada")
     } else {
-      toast.error("Error al crear la página")
+      toast.error("Error al crear la pagina")
     }
     setCreating(false)
   }
@@ -137,11 +147,53 @@ export default function AppEditorPage() {
     }
   }
 
+  async function agregarWidget(tipo: string) {
+    if (!widgetSeleccionado) {
+      toast.error("Primero selecciona una celda del canvas")
+      return
+    }
+    const fila = filas.find(f => f.id === widgetSeleccionado.filaId)
+    const yaOcupada = fila?.widgets.find(w => w.columna === widgetSeleccionado.columna)
+    if (yaOcupada) {
+      toast.error("Esa celda ya tiene un widget")
+      return
+    }
+    const porDefecto = WIDGETS[tipo as TipoWidget]?.porDefecto ?? {}
+    const res = await fetch("/api/widgets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filaId: widgetSeleccionado.filaId,
+        columna: widgetSeleccionado.columna,
+        tipo,
+        configuracion: porDefecto,
+      }),
+    })
+    if (res.ok) {
+      const nuevoWidget = await res.json()
+      if (paginaActiva) fetchFilas(paginaActiva.id)
+      setPanelDerecho(nuevoWidget)
+      toast.success("Widget agregado", { duration: 1500 })
+    } else {
+      toast.error("Error al agregar widget")
+    }
+  }
+
   function seleccionarCelda(filaId: string, columna: number) {
     setWidgetSeleccionado({ filaId, columna })
     const fila = filas.find(f => f.id === filaId)
     const widget = fila?.widgets.find(w => w.columna === columna)
     setPanelDerecho(widget ?? null)
+  }
+
+  // Guarda la configuracion del widget en la DB y refresca el canvas
+  async function guardarConfigWidget(widgetId: string, configuracion: any) {
+    await fetch(`/api/widgets/${widgetId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ configuracion }),
+    })
+    if (paginaActiva) fetchFilas(paginaActiva.id)
   }
 
   async function togglePublicar() {
@@ -161,11 +213,11 @@ export default function AppEditorPage() {
   }
 
   if (loading) return <div className="p-8 text-muted-foreground">Cargando...</div>
-  if (!app) return <div className="p-8 text-muted-foreground">Aplicación no encontrada</div>
+  if (!app) return <div className="p-8 text-muted-foreground">Aplicacion no encontrada</div>
 
   return (
     <div className="flex h-full">
-      {/* Sidebar páginas */}
+
       <aside className="w-52 border-r bg-background flex flex-col shrink-0">
         <div className="p-3 border-b">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">
@@ -200,7 +252,7 @@ export default function AppEditorPage() {
                 <Button size="sm" className="h-6 text-xs flex-1" onClick={crearPagina} disabled={creating}>
                   {creating ? "..." : "Crear"}
                 </Button>
-                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setShowForm(false)}>✕</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setShowForm(false)}>x</Button>
               </div>
             </div>
           ) : (
@@ -209,48 +261,52 @@ export default function AppEditorPage() {
               className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-sm text-muted-foreground hover:bg-muted mt-1"
             >
               <Plus className="h-3.5 w-3.5" />
-              Nueva página
+              Nueva pagina
             </button>
           )}
         </div>
 
-        {/* Catálogo de widgets */}
         <div className="border-t">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-3 py-2">Widgets</p>
           <div className="px-2 pb-2 flex flex-col gap-1">
             {WIDGETS_CATALOGO.map((w) => {
               const Icon = w.icon
               return (
-                <div
+                <button
                   key={w.tipo}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted cursor-grab"
+                  onClick={() => agregarWidget(w.tipo)}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm w-full text-left transition-colors ${
+                    widgetSeleccionado
+                      ? "hover:bg-primary/10 hover:text-primary cursor-pointer"
+                      : "opacity-50 cursor-not-allowed"
+                  }`}
                 >
                   <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <span>{w.label}</span>
-                </div>
+                </button>
               )
             })}
           </div>
+          {!widgetSeleccionado && (
+            <p className="text-xs text-muted-foreground px-3 pb-3">
+              Selecciona una celda para agregar
+            </p>
+          )}
         </div>
       </aside>
 
-      {/* Canvas */}
       <main className="flex-1 overflow-auto p-6">
         {!paginaActiva ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
-            <p>Selecciona o crea una página</p>
+            <p>Selecciona o crea una pagina</p>
           </div>
         ) : (
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-lg">{paginaActiva.nombre}</h2>
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={app.publicada ? "outline" : "secondary"}
-                  onClick={togglePublicar}
-                >
-                  {app.publicada ? "✓ Publicada" : "Publicar"}
+                <Button size="sm" variant={app.publicada ? "outline" : "secondary"} onClick={togglePublicar}>
+                  {app.publicada ? "Publicada" : "Publicar"}
                 </Button>
                 <Button size="sm" onClick={agregarFila}>
                   <Plus className="h-3.5 w-3.5 mr-1" />
@@ -304,15 +360,21 @@ export default function AppEditorPage() {
                           <div
                             key={colIndex}
                             onClick={() => seleccionarCelda(fila.id, colIndex)}
-                            className={`border-2 border-dashed rounded flex items-center justify-center min-h-20 transition-colors cursor-pointer ${
-                              isSelected ? "border-primary bg-primary/5" : "hover:border-primary/40"
+                            className={`border-2 rounded flex items-center justify-center min-h-20 transition-colors cursor-pointer p-2 ${
+                              isSelected
+                                ? "border-primary bg-primary/5"
+                                : widget
+                                ? "border-transparent hover:border-primary/40"
+                                : "border-dashed hover:border-primary/40"
                             }`}
                           >
                             {widget ? (
-                              <span className="text-sm text-muted-foreground">{widget.tipo}</span>
-                            ) : (
-                              <Plus className="h-4 w-4 opacity-40" />
-                            )}
+                              <div className="w-full">
+                             <RenderWidget widget={widget} />
+                             </div>
+                              ) : (
+                             <Plus className="h-4 w-4 opacity-40" />
+                              )}
                           </div>
                         )
                       })}
@@ -331,11 +393,10 @@ export default function AppEditorPage() {
         )}
       </main>
 
-      {/* Panel derecho */}
       <aside className="w-64 border-l bg-background flex flex-col shrink-0">
         <div className="p-3 border-b flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {panelDerecho ? "Configuración" : "Propiedades"}
+            {panelDerecho ? "Configuracion" : "Propiedades"}
           </p>
           {panelDerecho && (
             <button onClick={() => setPanelDerecho(null)} className="hover:opacity-70">
@@ -343,15 +404,72 @@ export default function AppEditorPage() {
             </button>
           )}
         </div>
-        <div className="flex-1 p-3">
+        <div className="flex-1 p-3 overflow-auto">
           {widgetSeleccionado && !panelDerecho ? (
             <div className="text-center text-muted-foreground py-8">
-              <p className="text-sm">Selecciona un widget del catálogo para agregar aquí</p>
+              <p className="text-sm">Selecciona un widget del catalogo para agregar aqui</p>
             </div>
           ) : panelDerecho ? (
-            <div>
-              <p className="text-sm font-medium mb-3 capitalize">{panelDerecho.tipo}</p>
-              <p className="text-xs text-muted-foreground">Las propiedades del widget aparecerán aquí en Fase 2.</p>
+            <div className="flex flex-col gap-4">
+              <p className="text-sm font-medium capitalize">
+                {WIDGETS[panelDerecho.tipo as TipoWidget]?.etiqueta ?? panelDerecho.tipo}
+              </p>
+              {(WIDGETS[panelDerecho.tipo as TipoWidget]?.schema ?? []).map((campo) => (
+                <div key={campo.campo} className="flex flex-col gap-1">
+                  <label className="text-xs text-muted-foreground">{campo.etiqueta}</label>
+
+                  {campo.tipo === "expresion" && (
+                    <input
+                      className="border rounded px-2 py-1 text-sm w-full"
+                      value={panelDerecho.configuracion?.[campo.campo] ?? ""}
+                      placeholder={"placeholder" in campo ? campo.placeholder : ""}
+                      onChange={(e) => {
+                        const nueva = { ...panelDerecho.configuracion, [campo.campo]: e.target.value }
+                        setPanelDerecho({ ...panelDerecho, configuracion: nueva })
+                        guardarConfigWidget(panelDerecho.id, nueva)
+                      }}
+                    />
+                  )}
+
+                  {campo.tipo === "selector" && (
+                    <select
+                      className="border rounded px-2 py-1 text-sm w-full"
+                      value={panelDerecho.configuracion?.[campo.campo] ?? ""}
+                      onChange={(e) => {
+                        const nueva = { ...panelDerecho.configuracion, [campo.campo]: e.target.value }
+                        setPanelDerecho({ ...panelDerecho, configuracion: nueva })
+                        guardarConfigWidget(panelDerecho.id, nueva)
+                      }}
+                    >
+                      {"opciones" in campo && campo.opciones.map((op) => (
+                        <option key={op.valor} value={op.valor}>{op.etiqueta}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {campo.tipo === "alineacion" && (
+                    <div className="flex gap-1">
+                      {["left", "center", "right"].map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => {
+                            const nueva = { ...panelDerecho.configuracion, [campo.campo]: a }
+                            setPanelDerecho({ ...panelDerecho, configuracion: nueva })
+                            guardarConfigWidget(panelDerecho.id, nueva)
+                          }}
+                          className={`flex-1 py-1 text-xs border rounded ${
+                            panelDerecho.configuracion?.[campo.campo] === a
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-muted"
+                          }`}
+                        >
+                          {a === "left" ? "Izq" : a === "center" ? "Centro" : "Der"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-8">
@@ -360,6 +478,7 @@ export default function AppEditorPage() {
           )}
         </div>
       </aside>
+
     </div>
   )
 }
