@@ -32,6 +32,7 @@ interface Aplicacion {
   id: string
   nombre: string
   slug: string
+  publicada: boolean
 }
 
 const WIDGETS_CATALOGO = [
@@ -143,6 +144,22 @@ export default function AppEditorPage() {
     setPanelDerecho(widget ?? null)
   }
 
+  async function togglePublicar() {
+    if (!app) return
+    const res = await fetch(`/api/aplicaciones/${app.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicada: !app.publicada }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setApp(updated)
+      toast.success(updated.publicada ? "App publicada" : "App despublicada", { duration: 2000 })
+    } else {
+      toast.error("Error al cambiar estado")
+    }
+  }
+
   if (loading) return <div className="p-8 text-muted-foreground">Cargando...</div>
   if (!app) return <div className="p-8 text-muted-foreground">Aplicación no encontrada</div>
 
@@ -227,10 +244,19 @@ export default function AppEditorPage() {
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-lg">{paginaActiva.nombre}</h2>
-              <Button size="sm" onClick={agregarFila}>
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                Agregar fila
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={app.publicada ? "outline" : "secondary"}
+                  onClick={togglePublicar}
+                >
+                  {app.publicada ? "✓ Publicada" : "Publicar"}
+                </Button>
+                <Button size="sm" onClick={agregarFila}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Agregar fila
+                </Button>
+              </div>
             </div>
 
             {filas.length === 0 ? (

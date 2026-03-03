@@ -2,16 +2,14 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 
-// GET — listar páginas de una aplicación
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params
     const paginas = await prisma.pagina.findMany({
-      where: { aplicacionId: id, deletedAt: null },
-      orderBy: { orden: "asc" },
+      where: { aplicacionId: params.id, deletedAt: null },
+      orderBy: [{ esInicio: "desc" }, { orden: "asc" }],
     })
     return NextResponse.json(paginas)
   } catch (error) {
@@ -19,10 +17,9 @@ export async function GET(
   }
 }
 
-// POST — crear nueva página
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await auth()
@@ -33,12 +30,10 @@ export async function POST(
     const usuario = await prisma.usuario.findUnique({
       where: { email: session.user.email },
     })
-
     if (!usuario) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
     }
 
-    const { id } = await params
     const body = await request.json()
     const { nombre } = body
 
@@ -53,26 +48,21 @@ export async function POST(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "")
 
-    // Contar páginas existentes para el orden
     const count = await prisma.pagina.count({
-      where: { aplicacionId: id, deletedAt: null },
+      where: { aplicacionId: params.id, deletedAt: null },
     })
 
     const pagina = await prisma.pagina.create({
-  data: {
-    nombre,
-    url,
-    orden: count,
-    esInicio: count === 0,
-    permisos: {},
-    aplicacion: {
-      connect: { id },
-    },
-    creadoPorUsuario: {
-      connect: { id: usuario.id },
-    },
-  },
-})
+      data: {
+        nombre,
+        url,
+        esInicio: count === 0,
+        orden: count,
+        permisos: {},
+        aplicacion: { connect: { id: params.id } },
+        creadoPorUsuario: { connect: { id: usuario.id } },
+      },
+    })
 
     return NextResponse.json(pagina, { status: 201 })
   } catch (error) {
