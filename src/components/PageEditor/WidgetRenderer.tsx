@@ -1,9 +1,16 @@
 'use client'
 
-import React, { Suspense } from 'react'
+import React, { Suspense, useMemo } from 'react'
 import type { GridWidget } from '@/types/layout'
 import { usePageStore } from '@/store/usePageStore'
 import { useEditorUiStore } from '@/store/useEditorUiStore'
+import { useAppStore } from '@/store/useAppStore'
+import { buildContexto, evaluarExpresion } from '@/lib/expresiones'
+import { WidgetTexto } from '@/widgets/texto'
+import { textoPorDefecto, type TextoConfig } from '@/widgets/texto/config'
+
+const EMPTY_PAGE_VARS: Record<string, unknown> = {}
+const EMPTY_QUERY_RESULTS: Record<string, unknown> = {}
 
 export interface WidgetRendererProps {
   /** Widget a renderizar */
@@ -17,18 +24,50 @@ export interface WidgetRendererProps {
  * Componente que renderiza un widget dinámicamente
  */
 export function WidgetRenderer({ widget, isEditing }: WidgetRendererProps) {
+  const layout = usePageStore((state) => state.layout)
   const removeWidget = usePageStore((state) => state.removeWidget)
-  const { selectedWidgetId, setSelectedWidget } = useEditorUiStore()
+  const selectedWidgetId = useEditorUiStore((state) => state.selectedWidgetId)
+  const setSelectedWidget = useEditorUiStore((state) => state.setSelectedWidget)
+  const usuario = useAppStore((state) => state.usuario)
+  const pageVarsFromStore = useAppStore((state) =>
+    layout?.id ? state.pageVars[layout.id] : undefined
+  )
+  const queryResultsFromStore = useAppStore((state) =>
+    layout?.id ? state.queryResultsByPage[layout.id] : undefined
+  )
+  const pageVars = pageVarsFromStore ?? EMPTY_PAGE_VARS
+  const queryResults = queryResultsFromStore ?? EMPTY_QUERY_RESULTS
   const isSelected = selectedWidgetId === widget.id
+
+  const contexto = useMemo(
+    () =>
+      buildContexto({
+        usuario,
+        pageVars,
+        queryResults,
+      }),
+    [usuario, pageVars, queryResults]
+  )
 
   // Para ahora, mostrar un placeholder simple
   // En futuro, aquí se integraría con el registro de widgets dinámicos
   const renderWidget = () => {
     switch (widget.type) {
       case 'texto':
+        const rawConfig = (widget.config ?? {}) as Partial<TextoConfig>
+        const contenidoEvaluado = evaluarExpresion(
+          String(rawConfig.contenido ?? textoPorDefecto.contenido),
+          contexto
+        )
+        const textConfig: TextoConfig = {
+          ...textoPorDefecto,
+          ...rawConfig,
+          contenido: contenidoEvaluado,
+        }
+
         return (
           <div className="widget-content">
-            <p>{widget.config?.contenido || 'Texto vacío'}</p>
+            <WidgetTexto config={textConfig} />
           </div>
         )
       case 'input':

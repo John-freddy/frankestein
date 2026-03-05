@@ -15,6 +15,9 @@ interface AppState {
   // Variables de página (clave = pageId, valor = objeto de variables)
   pageVars: Record<string, Record<string, unknown>>
 
+  // Resultados de queries por página (clave = pageId, queryName -> resultado)
+  queryResultsByPage: Record<string, Record<string, unknown>>
+
   // Acciones — usuario
   setUsuario: (usuario: Usuario | null) => void
   setToken: (token: string | null) => void
@@ -23,12 +26,18 @@ interface AppState {
   setPageVar: (pageId: string, key: string, value: unknown) => void
   getPageVar: (pageId: string, key: string) => unknown
   clearPageVars: (pageId: string) => void
+
+  // Acciones — resultados de query
+  setPageQueryResult: (pageId: string, queryName: string, value: unknown) => void
+  getPageQueryResults: (pageId: string) => Record<string, unknown>
+  clearPageQueryResults: (pageId: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   usuario: null,
   token: null,
   pageVars: {},
+  queryResultsByPage: {},
 
   setUsuario: (usuario) => set({ usuario }),
   setToken: (token) => set({ token }),
@@ -54,5 +63,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       const updated = { ...state.pageVars }
       delete updated[pageId]
       return { pageVars: updated }
+    }),
+
+  setPageQueryResult: (pageId, queryName, value) =>
+    set((state) => ({
+      queryResultsByPage: {
+        ...state.queryResultsByPage,
+        [pageId]: {
+          ...(state.queryResultsByPage[pageId] ?? {}),
+          [queryName]: value,
+        },
+      },
+    })),
+
+  getPageQueryResults: (pageId) => {
+    const state = get()
+    return state.queryResultsByPage[pageId] ?? {}
+  },
+
+  clearPageQueryResults: (pageId) =>
+    set((state) => {
+      const updated = { ...state.queryResultsByPage }
+      delete updated[pageId]
+      return { queryResultsByPage: updated }
     }),
 }))

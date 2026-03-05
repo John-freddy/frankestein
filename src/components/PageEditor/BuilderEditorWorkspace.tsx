@@ -26,6 +26,7 @@ import { GridCanvas } from '@/components/PageEditor/GridCanvas'
 import { WidgetProperties } from '@/components/PageEditor/WidgetProperties'
 import { usePageStore } from '@/store/usePageStore'
 import { useEditorUiStore } from '@/store/useEditorUiStore'
+import { useAppStore } from '@/store/useAppStore'
 import { useSaveController } from '@/hooks/useSaveController'
 import type { GridWidget, PageLayout } from '@/types/layout'
 import { WIDGETS } from '@/widgets/registro'
@@ -120,6 +121,8 @@ export default function BuilderEditorWorkspace({
     setUiFilter,
     clearSelection,
   } = useEditorUiStore()
+  const setPageQueryResult = useAppStore((state) => state.setPageQueryResult)
+  const clearPageQueryResults = useAppStore((state) => state.clearPageQueryResults)
 
   const { isSaving, saveStateText, scheduleAutoSave, saveNow } = useSaveController({
     pageId,
@@ -402,6 +405,9 @@ export default function BuilderEditorWorkspace({
   }
 
   const handleRunQuery = async (queryId: string) => {
+    const queryItem = queries.find((item) => item.id === queryId)
+    const queryName = queryItem?.nombre
+
     try {
       setRunningQueryId(queryId)
 
@@ -414,44 +420,67 @@ export default function BuilderEditorWorkspace({
       const durationMs = Date.now() - startedAt
 
       if (!res.ok) {
+        const failedResult: QueryRunResult = {
+          ok: false,
+          status: typeof payload?.status === 'number' ? payload.status : res.status,
+          durationMs,
+          executedAt: new Date().toISOString(),
+          error: payload?.error || 'Error al ejecutar query',
+        }
+
         setQueryRunResults((prev) => ({
           ...prev,
-          [queryId]: {
-            ok: false,
-            status: typeof payload?.status === 'number' ? payload.status : res.status,
-            durationMs,
-            executedAt: new Date().toISOString(),
-            error: payload?.error || 'Error al ejecutar query',
-          },
+          [queryId]: failedResult,
         }))
+
+        if (queryName) {
+          setPageQueryResult(pageId, queryName, failedResult)
+        }
+
         return
+      }
+
+      const successResult: QueryRunResult = {
+        ok: true,
+        status: typeof payload?.status === 'number' ? payload.status : 200,
+        durationMs,
+        executedAt: new Date().toISOString(),
+        data: payload?.data,
       }
 
       setQueryRunResults((prev) => ({
         ...prev,
-        [queryId]: {
-          ok: true,
-          status: typeof payload?.status === 'number' ? payload.status : 200,
-          durationMs,
-          executedAt: new Date().toISOString(),
-          data: payload?.data,
-        },
+        [queryId]: successResult,
       }))
+
+      if (queryName) {
+        setPageQueryResult(pageId, queryName, successResult)
+      }
     } catch (error) {
+      const failedResult: QueryRunResult = {
+        ok: false,
+        status: null,
+        durationMs: 0,
+        executedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Error al ejecutar query',
+      }
+
       setQueryRunResults((prev) => ({
         ...prev,
-        [queryId]: {
-          ok: false,
-          status: null,
-          durationMs: 0,
-          executedAt: new Date().toISOString(),
-          error: error instanceof Error ? error.message : 'Error al ejecutar query',
-        },
+        [queryId]: failedResult,
       }))
+
+      if (queryName) {
+        setPageQueryResult(pageId, queryName, failedResult)
+      }
     } finally {
       setRunningQueryId(null)
     }
   }
+
+  useEffect(() => {
+    clearPageQueryResults(pageId)
+  }, [pageId, clearPageQueryResults])
 
   useEffect(() => {
     setSelectedPageUrl(pageUrl)
