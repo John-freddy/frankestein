@@ -1,22 +1,14 @@
-'use client'
-
-import dynamic from "next/dynamic"
-
-const PublicPageRenderer = dynamic(
-  () => import("./PublicPageRenderer"),
-  { ssr: false }
-)
+import PublicPageRenderer from "./PublicPageRenderer"
+import type { PageLayout } from "@/types/layout"
 
 export default function PublicPageWithGridLayout({
-  appSlug,
-  pageSlug,
+  initialLayout,
 }: {
-  appSlug: string
-  pageSlug: string
+  initialLayout: PageLayout
 }) {
   return (
     <div suppressHydrationWarning>
-      <PublicPageRenderer appSlug={appSlug} pageSlug={pageSlug} />
+      <PublicPageRenderer initialLayout={initialLayout} />
     </div>
   )
 }

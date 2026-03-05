@@ -2,6 +2,15 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 
+function toSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -43,12 +52,35 @@ export async function POST(
       return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 })
     }
 
-    const url = nombre
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
+    const nombreLimpio = String(nombre).trim()
+    if (!nombreLimpio) {
+      return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 })
+    }
+
+    const baseUrl = toSlug(nombreLimpio)
+
+    if (!baseUrl) {
+      return NextResponse.json({ error: "El nombre no genera un slug válido" }, { status: 400 })
+    }
+
+    const existingUrls = await prisma.pagina.findMany({
+      where: {
+        aplicacionId: id,
+        url: {
+          startsWith: baseUrl,
+        },
+      },
+      select: { url: true },
+    })
+
+    const existingUrlsSet = new Set(existingUrls.map((item) => item.url))
+    let url = baseUrl
+    let suffix = 2
+
+    while (existingUrlsSet.has(url)) {
+      url = `${baseUrl}-${suffix}`
+      suffix += 1
+    }
 
     const count = await prisma.pagina.count({
       where: { aplicacionId: id, deletedAt: null },
@@ -56,7 +88,7 @@ export async function POST(
 
     const pagina = await prisma.pagina.create({
       data: {
-        nombre,
+        nombre: nombreLimpio,
         url,
         esInicio: count === 0,
         orden: count,
@@ -69,6 +101,13 @@ export async function POST(
 
     return NextResponse.json(pagina, { status: 201 })
   } catch (error: any) {
+    if (error?.code === "P2002") {
+      return NextResponse.json(
+        { error: "Ya existe una página con ese slug en esta app" },
+        { status: 409 }
+      )
+    }
+
     console.error("Error creating página:", error)
     return NextResponse.json(
       { error: "Error al crear página", details: error.message },

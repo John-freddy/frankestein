@@ -1,10 +1,27 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { MoreVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { GridCanvas } from '@/components/PageEditor/GridCanvas'
 import { WidgetProperties } from '@/components/PageEditor/WidgetProperties'
 import { usePageStore } from '@/store/usePageStore'
@@ -27,6 +44,7 @@ interface PageSummary {
   nombre: string
   url: string
   esInicio: boolean
+  isPublished?: boolean
 }
 
 interface PageQueryResource {
@@ -79,6 +97,7 @@ export default function BuilderEditorWorkspace({
   const searchParams = useSearchParams()
   const {
     layout,
+    isLoading,
     setLayout,
     setLoading,
     setError,
@@ -108,7 +127,7 @@ export default function BuilderEditorWorkspace({
     setError,
     debounceMs: 2000,
   })
-  const [queriesLoading, setQueriesLoading] = useState(true)
+  const [queriesLoading, setQueriesLoading] = useState(false)
   const [queriesError, setQueriesError] = useState<string | null>(null)
   const [queries, setQueries] = useState<PageQueryResource[]>([])
   const [dataSources, setDataSources] = useState<DataSourceSummary[]>([])
@@ -124,7 +143,7 @@ export default function BuilderEditorWorkspace({
   const [queryFilter, setQueryFilter] = useState('')
   const [runningQueryId, setRunningQueryId] = useState<string | null>(null)
   const [queryRunResults, setQueryRunResults] = useState<Record<string, QueryRunResult>>({})
-  const [jsLoading, setJsLoading] = useState(true)
+  const [jsLoading, setJsLoading] = useState(false)
   const [jsError, setJsError] = useState<string | null>(null)
   const [jsObjects, setJsObjects] = useState<JsObjectResource[]>([])
   const [jsFormMode, setJsFormMode] = useState<'create' | 'edit'>('create')
@@ -140,9 +159,19 @@ export default function BuilderEditorWorkspace({
   const [pages, setPages] = useState<PageSummary[]>([])
   const [newPageName, setNewPageName] = useState('')
   const [creatingPage, setCreatingPage] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [selectedPageUrl, setSelectedPageUrl] = useState(pageUrl)
+  const [editingPageId, setEditingPageId] = useState<string | null>(null)
+  const [editingPageName, setEditingPageName] = useState('')
+  const [editingPageUrl, setEditingPageUrl] = useState('')
+  const [pageActionLoadingId, setPageActionLoadingId] = useState<string | null>(null)
+  const [pendingDeletePageId, setPendingDeletePageId] = useState<string | null>(null)
 
   const canvasAreaRef = useRef<HTMLElement | null>(null)
   const urlStateReadyRef = useRef(false)
+  const hasLoadedQueriesRef = useRef(false)
+  const hasLoadedSourcesRef = useRef(false)
+  const hasLoadedJsRef = useRef(false)
   const searchParamsString = searchParams.toString()
 
   const resetQueryForm = useCallback(() => {
@@ -165,6 +194,7 @@ export default function BuilderEditorWorkspace({
 
       const data: PageQueryResource[] = await res.json()
       setQueries(Array.isArray(data) ? data : [])
+      hasLoadedQueriesRef.current = true
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar queries'
       setQueriesError(message)
@@ -181,6 +211,7 @@ export default function BuilderEditorWorkspace({
       const data: DataSourceSummary[] = await res.json()
       const sources = Array.isArray(data) ? data : []
       setDataSources(sources)
+      hasLoadedSourcesRef.current = true
 
       setQuerySourceId((current) => {
         if (current) return current
@@ -213,6 +244,7 @@ export default function BuilderEditorWorkspace({
 
       const data: JsObjectResource[] = await res.json()
       setJsObjects(Array.isArray(data) ? data : [])
+      hasLoadedJsRef.current = true
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar objetos JS'
       setJsError(message)
@@ -422,11 +454,30 @@ export default function BuilderEditorWorkspace({
   }
 
   useEffect(() => {
+    setSelectedPageUrl(pageUrl)
+  }, [pageUrl])
+
+  useEffect(() => {
+    if (pages.length === 0) return
+    const stillExists = pages.some((page) => page.url === selectedPageUrl)
+    if (!stillExists) {
+      setSelectedPageUrl(pageUrl)
+    }
+  }, [pages, selectedPageUrl, pageUrl])
+
+  useEffect(() => {
     resetLayout()
     clearSelection()
     setUiFilter('')
     resetQueryForm()
     resetJsForm()
+    hasLoadedQueriesRef.current = false
+    hasLoadedSourcesRef.current = false
+    hasLoadedJsRef.current = false
+    setQueries([])
+    setDataSources([])
+    setJsObjects([])
+    setQueryRunResults({})
   }, [pageId, resetLayout, clearSelection, setUiFilter, resetQueryForm, resetJsForm])
 
   useEffect(() => {
@@ -516,54 +567,40 @@ export default function BuilderEditorWorkspace({
         if (!res.ok) throw new Error('Error al cargar el layout')
 
         const data: PageLayout = await res.json()
-        setLayout(data)
+        if (data && Array.isArray(data.widgets)) {
+          setLayout(data)
+        } else {
+          setLayout({ id: pageId, name: pageNombre, widgets: [] })
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Error desconocido'
         setError(message)
+        setLayout({ id: pageId, name: pageNombre, widgets: [] })
       } finally {
         setLoading(false)
       }
     }
 
     void fetchLayout()
-  }, [pageId, setError, setLayout, setLoading])
+  }, [pageId, pageNombre, setError, setLayout, setLoading])
 
   useEffect(() => {
-    void loadQueries()
-  }, [loadQueries])
+    if (leftTab !== 'data') return
 
-  useEffect(() => {
-    void loadSources()
-  }, [loadSources])
+    if (dataTab === 'queries') {
+      if (!hasLoadedQueriesRef.current) {
+        void loadQueries()
+      }
+      if (!hasLoadedSourcesRef.current) {
+        void loadSources()
+      }
+      return
+    }
 
-  useEffect(() => {
-    void loadJsObjects()
-  }, [loadJsObjects])
-
-  useEffect(() => {
-    if (leftTab !== 'data' || dataTab !== 'queries') return
-    if (!queriesError || queriesLoading) return
-
-    void loadQueries()
-  }, [leftTab, dataTab, queriesError, queriesLoading, loadQueries])
-
-  useEffect(() => {
-    if (leftTab !== 'data' || dataTab !== 'js') return
-    if (!jsError || jsLoading) return
-
-    void loadJsObjects()
-  }, [leftTab, dataTab, jsError, jsLoading, loadJsObjects])
-
-  useEffect(() => {
-    if (leftTab !== 'data' || dataTab !== 'js') return
-    if (!jsError?.toLowerCase().includes('reinicio')) return
-
-    const timer = setTimeout(() => {
+    if (!hasLoadedJsRef.current) {
       void loadJsObjects()
-    }, 3000)
-
-    return () => clearTimeout(timer)
-  }, [leftTab, dataTab, jsError, loadJsObjects, jsLoading])
+    }
+  }, [leftTab, dataTab, loadQueries, loadSources, loadJsObjects])
 
   useEffect(() => {
     const fetchPages = async () => {
@@ -609,43 +646,139 @@ export default function BuilderEditorWorkspace({
     void saveNow(layout.widgets)
   }
 
-  const orderedWidgets = [...(layout?.widgets ?? [])].sort(
-    (firstWidget, secondWidget) =>
-      firstWidget.y - secondWidget.y || firstWidget.x - secondWidget.x
+  const handlePreviewPage = () => {
+    window.open(`/app/${appSlug}/${pageUrl}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const handlePublishPage = async () => {
+    if (!layout?.widgets) return
+
+    try {
+      setPublishing(true)
+      setError(null)
+
+      if (isDirty) {
+        await saveNow(layout.widgets)
+      }
+
+      const publishPageRes = await fetch(`/api/paginas/${pageId}/publicar`, {
+        method: 'POST',
+      })
+
+      if (!publishPageRes.ok) {
+        const body = await publishPageRes.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'No se pudo publicar la página')
+      }
+
+      const publishAppRes = await fetch(`/api/aplicaciones/${appId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicada: true }),
+      })
+
+      if (!publishAppRes.ok) {
+        const body = await publishAppRes.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'La página se publicó, pero no se pudo publicar la app')
+      }
+
+      const refreshedPagesRes = await fetch(`/api/aplicaciones/${appId}/paginas`)
+      if (refreshedPagesRes.ok) {
+        const refreshedPages: PageSummary[] = await refreshedPagesRes.json()
+        setPages(Array.isArray(refreshedPages) ? refreshedPages : [])
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al publicar'
+      setError(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const handleUnpublishPage = async () => {
+    try {
+      setPublishing(true)
+      setError(null)
+
+      const unpublishPageRes = await fetch(`/api/paginas/${pageId}/despublicar`, {
+        method: 'POST',
+      })
+
+      if (!unpublishPageRes.ok) {
+        const body = await unpublishPageRes.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'No se pudo despublicar la página')
+      }
+
+      const refreshedPagesRes = await fetch(`/api/aplicaciones/${appId}/paginas`)
+      if (refreshedPagesRes.ok) {
+        const refreshedPages: PageSummary[] = await refreshedPagesRes.json()
+        setPages(Array.isArray(refreshedPages) ? refreshedPages : [])
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al despublicar'
+      setError(message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const orderedWidgets = useMemo(
+    () =>
+      [...(layout?.widgets ?? [])].sort(
+        (firstWidget, secondWidget) =>
+          firstWidget.y - secondWidget.y || firstWidget.x - secondWidget.x
+      ),
+    [layout?.widgets]
+  )
+  const currentPage = useMemo(
+    () => pages.find((page) => page.id === pageId),
+    [pages, pageId]
+  )
+  const isCurrentPagePublished = Boolean(currentPage?.isPublished)
+
+  const filteredWidgets = useMemo(
+    () =>
+      orderedWidgets.filter((widget) => {
+        if (!uiFilter.trim()) return true
+
+        const filterValue = uiFilter.toLowerCase()
+        const widgetLabel = WIDGETS[widget.type as keyof typeof WIDGETS]?.etiqueta ?? widget.type
+
+        return (
+          widget.id.toLowerCase().includes(filterValue) ||
+          widget.type.toLowerCase().includes(filterValue) ||
+          widgetLabel.toLowerCase().includes(filterValue)
+        )
+      }),
+    [orderedWidgets, uiFilter]
   )
 
-  const filteredWidgets = orderedWidgets.filter((widget) => {
-    if (!uiFilter.trim()) return true
+  const filteredQueries = useMemo(
+    () =>
+      queries.filter((queryItem) => {
+        if (!queryFilter.trim()) return true
 
-    const filterValue = uiFilter.toLowerCase()
-    const widgetLabel = WIDGETS[widget.type as keyof typeof WIDGETS]?.etiqueta ?? widget.type
+        const filterValue = queryFilter.toLowerCase()
+        const method = String(queryItem.config?.method ?? 'GET').toLowerCase()
+        const path = String(queryItem.config?.path ?? '').toLowerCase()
 
-    return (
-      widget.id.toLowerCase().includes(filterValue) ||
-      widget.type.toLowerCase().includes(filterValue) ||
-      widgetLabel.toLowerCase().includes(filterValue)
-    )
-  })
+        return (
+          queryItem.nombre.toLowerCase().includes(filterValue) ||
+          queryItem.fuente.nombre.toLowerCase().includes(filterValue) ||
+          method.includes(filterValue) ||
+          path.includes(filterValue)
+        )
+      }),
+    [queries, queryFilter]
+  )
 
-  const filteredQueries = queries.filter((queryItem) => {
-    if (!queryFilter.trim()) return true
-
-    const filterValue = queryFilter.toLowerCase()
-    const method = String(queryItem.config?.method ?? 'GET').toLowerCase()
-    const path = String(queryItem.config?.path ?? '').toLowerCase()
-
-    return (
-      queryItem.nombre.toLowerCase().includes(filterValue) ||
-      queryItem.fuente.nombre.toLowerCase().includes(filterValue) ||
-      method.includes(filterValue) ||
-      path.includes(filterValue)
-    )
-  })
-
-  const filteredJsObjects = jsObjects.filter((jsObject) => {
-    if (!jsFilter.trim()) return true
-    return jsObject.nombre.toLowerCase().includes(jsFilter.toLowerCase())
-  })
+  const filteredJsObjects = useMemo(
+    () =>
+      jsObjects.filter((jsObject) => {
+        if (!jsFilter.trim()) return true
+        return jsObject.nombre.toLowerCase().includes(jsFilter.toLowerCase())
+      }),
+    [jsObjects, jsFilter]
+  )
 
   const selectedWidget = layout?.widgets.find((widget) => widget.id === selectedWidgetId) ?? null
 
@@ -660,13 +793,18 @@ export default function BuilderEditorWorkspace({
   }, [layout, selectedWidgetId, setSelectedWidget])
 
   const handleAddWidget = (widgetType: keyof typeof WIDGETS) => {
-    if (!layout) return
+    if (!layout) {
+      setLayout({ id: pageId, name: pageNombre, widgets: [] })
+    }
+
+    const currentLayout = usePageStore.getState().layout
+    if (!currentLayout) return
 
     let x = 0
     let y = 0
 
-    if (layout.widgets.length > 0) {
-      const lastWidget = layout.widgets[layout.widgets.length - 1]
+    if (currentLayout.widgets.length > 0) {
+      const lastWidget = currentLayout.widgets[currentLayout.widgets.length - 1]
       y = lastWidget.y + lastWidget.h + 1
     }
 
@@ -703,18 +841,202 @@ export default function BuilderEditorWorkspace({
       })
 
       if (!res.ok) {
-        throw new Error('No se pudo crear la página')
+        const body = await res.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'No se pudo crear la página')
       }
 
       const page: PageSummary = await res.json()
       setNewPageName('')
-      setLeftTab('ui')
-      router.push(`/builder/${appSlug}/${page.url}`)
+      setLeftTab('pages')
+      setSelectedPageUrl(page.url)
+      await reloadPages()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la página'
       setPagesError(message)
     } finally {
       setCreatingPage(false)
+    }
+  }
+
+  const buildBuilderUrl = useCallback(
+    (targetPageUrl: string, nextTab: 'pages' | 'ui' | 'data') => {
+      const nextQueryParams = new URLSearchParams(searchParamsString)
+
+      if (nextTab === 'ui') {
+        nextQueryParams.delete('tab')
+        nextQueryParams.delete('dataTab')
+      } else if (nextTab === 'pages') {
+        nextQueryParams.set('tab', 'pages')
+        nextQueryParams.delete('dataTab')
+      } else {
+        nextQueryParams.set('tab', 'data')
+        nextQueryParams.set('dataTab', dataTab)
+      }
+
+      const nextQuery = nextQueryParams.toString()
+      return `/builder/${appSlug}/${targetPageUrl}${nextQuery ? `?${nextQuery}` : ''}`
+    },
+    [appSlug, dataTab, searchParamsString]
+  )
+
+  const handleLeftTabChange = (nextTab: 'pages' | 'ui' | 'data') => {
+    if (nextTab === 'pages') {
+      setLeftTab('pages')
+      return
+    }
+
+    const pageExists = pages.some((item) => item.url === selectedPageUrl)
+    const targetPageUrl = pageExists ? selectedPageUrl : pageUrl
+
+    if (targetPageUrl !== pageUrl) {
+      const targetUrl = buildBuilderUrl(targetPageUrl, nextTab)
+      router.push(targetUrl)
+      return
+    }
+
+    setLeftTab(nextTab)
+  }
+
+  const startEditPage = (page: PageSummary) => {
+    setEditingPageId(page.id)
+    setEditingPageName(page.nombre)
+    setEditingPageUrl(page.url)
+  }
+
+  const cancelEditPage = () => {
+    setEditingPageId(null)
+    setEditingPageName('')
+    setEditingPageUrl('')
+  }
+
+  const reloadPages = async () => {
+    const res = await fetch(`/api/aplicaciones/${appId}/paginas`)
+    if (!res.ok) throw new Error('No se pudo recargar páginas')
+    const pagesData: PageSummary[] = await res.json()
+    const safePages = Array.isArray(pagesData) ? pagesData : []
+    setPages(safePages)
+    return safePages
+  }
+
+  const handleUpdatePage = async (page: PageSummary) => {
+    if (!editingPageName.trim() || !editingPageUrl.trim()) {
+      setPagesError('Nombre y slug son requeridos')
+      return
+    }
+
+    try {
+      setPagesError(null)
+      setPageActionLoadingId(page.id)
+
+      const res = await fetch(`/api/paginas/${page.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: editingPageName.trim(),
+          url: editingPageUrl.trim(),
+        }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'No se pudo actualizar la página')
+      }
+
+      const updatedPage: PageSummary = await res.json()
+      const refreshedPages = await reloadPages()
+      cancelEditPage()
+
+      if (selectedPageUrl === page.url) {
+        setSelectedPageUrl(updatedPage.url)
+      }
+
+      if (!refreshedPages.some((item) => item.url === selectedPageUrl)) {
+        setSelectedPageUrl(updatedPage.url)
+      }
+
+      if (updatedPage.id === pageId && updatedPage.url !== page.url) {
+        router.replace(`/builder/${appSlug}/${updatedPage.url}`)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar página'
+      setPagesError(message)
+    } finally {
+      setPageActionLoadingId(null)
+    }
+  }
+
+  const handleSetHome = async (page: PageSummary) => {
+    try {
+      setPagesError(null)
+      setPageActionLoadingId(page.id)
+
+      const res = await fetch(`/api/paginas/${page.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ esInicio: true }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'No se pudo definir página inicio')
+      }
+
+      await reloadPages()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al definir inicio'
+      setPagesError(message)
+    } finally {
+      setPageActionLoadingId(null)
+    }
+  }
+
+  const requestDeletePage = (page: PageSummary) => {
+    if (pages.length <= 1) {
+      setPagesError('No puedes eliminar la última página de la aplicación')
+      return
+    }
+
+    setPendingDeletePageId(page.id)
+  }
+
+  const cancelDeletePage = () => {
+    setPendingDeletePageId(null)
+  }
+
+  const handleDeletePage = async (page: PageSummary) => {
+    if (pages.length <= 1) {
+      setPagesError('No puedes eliminar la última página de la aplicación')
+      return
+    }
+
+    try {
+      setPagesError(null)
+      setPageActionLoadingId(page.id)
+
+      const res = await fetch(`/api/paginas/${page.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: '' }))
+        throw new Error(body.error || 'No se pudo eliminar la página')
+      }
+
+      const refreshedPages = await reloadPages()
+      setPendingDeletePageId(null)
+
+      if (selectedPageUrl === page.url) {
+        setSelectedPageUrl(refreshedPages[0]?.url ?? pageUrl)
+      }
+
+      if (page.id === pageId) {
+        router.replace(`/builder/${appSlug}`)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar página'
+      setPagesError(message)
+    } finally {
+      setPageActionLoadingId(null)
     }
   }
 
@@ -734,9 +1056,34 @@ export default function BuilderEditorWorkspace({
           </div>
 
           <div className="flex items-center gap-2">
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs ${
+                isCurrentPagePublished
+                  ? 'border-green-200 bg-green-50 text-green-700'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {isCurrentPagePublished ? 'Página publicada' : 'Borrador'}
+            </span>
             <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
               {saveStateText}
             </span>
+            <Button variant="outline" onClick={handlePreviewPage}>
+              Preview
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void (isCurrentPagePublished ? handleUnpublishPage() : handlePublishPage())}
+              disabled={!layout || isSaving || publishing}
+            >
+              {publishing
+                ? isCurrentPagePublished
+                  ? 'Despublicando...'
+                  : 'Publicando...'
+                : isCurrentPagePublished
+                  ? 'Despublicar'
+                  : 'Publicar'}
+            </Button>
             <Button variant="outline" onClick={() => router.back()}>
               Volver
             </Button>
@@ -758,19 +1105,19 @@ export default function BuilderEditorWorkspace({
           <div className="flex border-b">
             <button
               className={`flex-1 px-3 py-2 text-sm ${leftTab === 'pages' ? 'bg-muted font-medium' : 'text-muted-foreground'}`}
-              onClick={() => setLeftTab('pages')}
+              onClick={() => handleLeftTabChange('pages')}
             >
               Pages
             </button>
             <button
               className={`flex-1 px-3 py-2 text-sm ${leftTab === 'ui' ? 'bg-muted font-medium' : 'text-muted-foreground'}`}
-              onClick={() => setLeftTab('ui')}
+              onClick={() => handleLeftTabChange('ui')}
             >
               UI
             </button>
             <button
               className={`flex-1 px-3 py-2 text-sm ${leftTab === 'data' ? 'bg-muted font-medium' : 'text-muted-foreground'}`}
-              onClick={() => setLeftTab('data')}
+              onClick={() => handleLeftTabChange('data')}
             >
               Data
             </button>
@@ -815,34 +1162,165 @@ export default function BuilderEditorWorkspace({
                 ) : (
                   <div className="space-y-2">
                     {pages.map((page) => {
-                      const isActive = page.id === pageId
+                      const isActive = page.url === selectedPageUrl
+                      const isCurrentRoutePage = page.id === pageId
+                      const isEditing = editingPageId === page.id
+                      const isActionLoading = pageActionLoadingId === page.id
 
                       return (
-                        <button
+                        <div
                           key={page.id}
-                          className={`w-full rounded-md border px-3 py-2 text-left ${
+                          className={`w-full rounded-md border px-2.5 py-1.5 ${
                             isActive ? 'border-primary bg-primary/5' : 'bg-card hover:bg-muted'
                           }`}
-                          onClick={() => {
-                            if (isActive) {
-                              setLeftTab('ui')
-                              canvasAreaRef.current?.focus()
-                              return
-                            }
-                            setLeftTab('ui')
-                            router.push(`/builder/${appSlug}/${page.url}`)
-                          }}
-                          type="button"
                         >
-                          <p className="truncate text-sm font-medium">{page.nombre}</p>
-                          <p className="text-xs text-muted-foreground">/{page.url}{page.esInicio ? ' · inicio' : ''}</p>
-                        </button>
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <Input
+                                value={editingPageName}
+                                onChange={(event) => setEditingPageName(event.target.value)}
+                                placeholder="Nombre"
+                                className="h-8"
+                              />
+                              <Input
+                                value={editingPageUrl}
+                                onChange={(event) => setEditingPageUrl(event.target.value)}
+                                placeholder="slug"
+                                className="h-8"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-7"
+                                  onClick={() => void handleUpdatePage(page)}
+                                  disabled={isActionLoading}
+                                >
+                                  {isActionLoading ? 'Guardando...' : 'Guardar'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7"
+                                  onClick={cancelEditPage}
+                                  disabled={isActionLoading}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <button
+                                  className="min-w-0 flex-1 text-left"
+                                  onClick={() => {
+                                    setLeftTab('pages')
+                                    setSelectedPageUrl(page.url)
+                                  }}
+                                  type="button"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-0 truncate text-sm font-medium">{page.nombre}</p>
+                                    {isActive && (
+                                      <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                        Seleccionada
+                                      </span>
+                                    )}
+                                    {!isActive && isCurrentRoutePage && (
+                                      <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                        Actual
+                                      </span>
+                                    )}
+                                    {page.esInicio && isActive && (
+                                      <span className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                        Inicio
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="truncate text-xs text-muted-foreground">/{page.url}</p>
+                                </button>
+
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded border text-sm text-muted-foreground hover:bg-muted"
+                                      disabled={isActionLoading}
+                                      aria-label="Acciones de página"
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => startEditPage(page)}>
+                                      Editar
+                                    </DropdownMenuItem>
+                                    {!page.esInicio && (
+                                      <DropdownMenuItem onClick={() => void handleSetHome(page)}>
+                                        Marcar como inicio
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => requestDeletePage(page)}
+                                      disabled={pages.length <= 1}
+                                    >
+                                      Eliminar
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+
+                            </>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
                 )}
               </div>
             )}
+
+            <AlertDialog
+              open={Boolean(pendingDeletePageId)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  cancelDeletePage()
+                }
+              }}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Eliminar página</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {`¿Eliminar la página "${pages.find((item) => item.id === pendingDeletePageId)?.nombre ?? ''}"? Esta acción no se puede deshacer.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    disabled={Boolean(pendingDeletePageId && pageActionLoadingId === pendingDeletePageId)}
+                  >
+                    Cancelar
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={Boolean(pendingDeletePageId && pageActionLoadingId === pendingDeletePageId)}
+                    onClick={(event) => {
+                      const pageToDelete = pages.find((item) => item.id === pendingDeletePageId)
+                      if (!pageToDelete) {
+                        event.preventDefault()
+                        return
+                      }
+                      event.preventDefault()
+                      void handleDeletePage(pageToDelete)
+                    }}
+                  >
+                    {pendingDeletePageId && pageActionLoadingId === pendingDeletePageId
+                      ? 'Eliminando...'
+                      : 'Eliminar'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {leftTab === 'ui' && (
               <div className="p-4">
@@ -854,8 +1332,9 @@ export default function BuilderEditorWorkspace({
                     {Object.entries(WIDGETS).map(([widgetType, widgetDefinition]) => (
                       <button
                         key={widgetType}
-                        className="flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm hover:bg-muted"
+                        className="flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                         onClick={() => handleAddWidget(widgetType as keyof typeof WIDGETS)}
+                        disabled={isLoading}
                         type="button"
                       >
                         <span className="font-medium">{widgetDefinition.etiqueta}</span>
@@ -863,6 +1342,9 @@ export default function BuilderEditorWorkspace({
                       </button>
                     ))}
                   </div>
+                  {isLoading && (
+                    <p className="mt-2 text-xs text-muted-foreground">Cargando layout de la página...</p>
+                  )}
                 </div>
 
                 <div>
@@ -913,7 +1395,7 @@ export default function BuilderEditorWorkspace({
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {filteredWidgets.map((widget) => {
+                      {filteredWidgets.map((widget, index) => {
                         const widgetLabel = WIDGETS[widget.type as keyof typeof WIDGETS]?.etiqueta ?? widget.type
                         const isSelected = selectedWidgetId === widget.id
 
@@ -928,8 +1410,8 @@ export default function BuilderEditorWorkspace({
                             onClick={() => setSelectedWidget(widget.id)}
                             type="button"
                           >
-                            <p className="truncate text-sm font-medium">{widget.id}</p>
-                            <p className="truncate text-xs text-muted-foreground">{widgetLabel}</p>
+                            <p className="truncate text-sm font-medium">{widgetLabel} {index + 1}</p>
+                            <p className="truncate text-[11px] text-muted-foreground/80">ID: {widget.id}</p>
                             <p className="text-xs text-muted-foreground">
                               x:{widget.x} y:{widget.y} · {widget.w}x{widget.h}
                             </p>
@@ -1293,7 +1775,13 @@ export default function BuilderEditorWorkspace({
           className="min-w-0 flex-1 bg-muted/20"
           tabIndex={-1}
         >
-          <GridCanvas isEditing={true} maxWidth={1400} />
+          {leftTab === 'ui' ? (
+            <GridCanvas isEditing={true} maxWidth={1400} />
+          ) : (
+            <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+              Selecciona la pestaña UI para visualizar y editar el canvas.
+            </div>
+          )}
         </main>
 
         <aside className="w-72 shrink-0 border-l bg-background">

@@ -12,7 +12,7 @@ export default async function AppSlugPage({ params }: Props) {
     where: { slug, publicada: true, deletedAt: null },
     include: {
       paginas: {
-        where: { deletedAt: null },
+        where: { deletedAt: null, isPublished: true },
         orderBy: [{ esInicio: "desc" }, { orden: "asc" }],
         take: 1,
       },

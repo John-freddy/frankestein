@@ -6,7 +6,10 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth
 
   const publicRoutes = ["/login"]
-  const isPublicRoute = publicRoutes.includes(pathname)
+  const isPublicRoute =
+    publicRoutes.includes(pathname) ||
+    pathname === '/app' ||
+    pathname.startsWith('/app/')
 
   if (!isLoggedIn && !isPublicRoute) {
     return NextResponse.redirect(new URL("/login", req.url))

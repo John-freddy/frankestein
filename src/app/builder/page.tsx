@@ -16,6 +16,16 @@ interface Aplicacion {
   createdAt: string
 }
 
+interface ExportResult {
+  exportPath: string
+  filesCount: number
+  quality: {
+    score: number
+    errors: number
+    warnings: number
+  }
+}
+
 export default function BuilderPage() {
   const [apps, setApps] = useState<Aplicacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,6 +34,8 @@ export default function BuilderPage() {
   const [descripcion, setDescripcion] = useState("")
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState("")
+  const [exportingAppId, setExportingAppId] = useState<string | null>(null)
+  const [exportResults, setExportResults] = useState<Record<string, ExportResult>>({})
 
   useEffect(() => {
     fetchApps()
@@ -64,6 +76,36 @@ export default function BuilderPage() {
       setError("Error al crear la aplicación")
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function exportarApp(appId: string) {
+    try {
+      setExportingAppId(appId)
+      setError("")
+
+      const res = await fetch(`/api/aplicaciones/${appId}/export`, {
+        method: "POST",
+      })
+
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(body.error ?? "No se pudo exportar la aplicación")
+        return
+      }
+
+      setExportResults((prev) => ({
+        ...prev,
+        [appId]: {
+          exportPath: body.exportPath,
+          filesCount: body.filesCount,
+          quality: body.quality,
+        },
+      }))
+    } catch {
+      setError("No se pudo exportar la aplicación")
+    } finally {
+      setExportingAppId(null)
     }
   }
 
@@ -123,21 +165,52 @@ export default function BuilderPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {apps.map((app) => (
-            <Link key={app.id} href={`/builder/${app.slug}`}>
-              <Card className="hover:border-primary/50 cursor-pointer transition-colors h-full">
+          {apps.map((app) => {
+            const exportResult = exportResults[app.id]
+
+            return (
+              <Card key={app.id} className="hover:border-primary/50 transition-colors h-full">
                 <CardHeader>
                   <CardTitle className="text-base">{app.nombre}</CardTitle>
                   <CardDescription>{app.descripcion || "Sin descripción"}</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <span className={`text-xs px-2 py-1 rounded-full ${app.publicada ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                    {app.publicada ? "Publicada" : "Borrador"}
-                  </span>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-xs px-2 py-1 rounded-full ${app.publicada ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                      {app.publicada ? "Publicada" : "Borrador"}
+                    </span>
+                    <div className="flex gap-2">
+                      <Link href={`/builder/${app.slug}`}>
+                        <Button size="sm" variant="outline">Abrir</Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        onClick={() => void exportarApp(app.id)}
+                        disabled={exportingAppId === app.id}
+                      >
+                        {exportingAppId === app.id ? "Exportando..." : "Exportar código"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {exportResult && (
+                    <div className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground space-y-1">
+                      <p>
+                        Export: <span className="font-medium text-foreground">{exportResult.exportPath}</span>
+                      </p>
+                      <p>
+                        Calidad: <span className="font-medium text-foreground">{exportResult.quality.score}/100</span>
+                        {` · E:${exportResult.quality.errors} W:${exportResult.quality.warnings}`}
+                      </p>
+                      <p>
+                        Archivos generados: <span className="font-medium text-foreground">{exportResult.filesCount}</span>
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            </Link>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

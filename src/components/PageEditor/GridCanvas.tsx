@@ -136,10 +136,6 @@ export function GridCanvas({
     static: !isEditing,
   })) || []
 
-  const layoutVersion = gridLayout
-    .map((item) => `${item.i}:${item.x},${item.y},${item.w},${item.h}`)
-    .join('|')
-
   const hasWidgets = layout && layout.widgets.length > 0
 
   return (
@@ -167,7 +163,6 @@ export function GridCanvas({
           </div>
         ) : (
           React.createElement(GridLayout as React.ComponentType<any>, {
-            key: layoutVersion,
             className: "grid-layout",
             layout: gridLayout,
             cols: 12,

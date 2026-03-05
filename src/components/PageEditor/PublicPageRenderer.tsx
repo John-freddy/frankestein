@@ -3,45 +3,24 @@
 import React, { useEffect } from 'react'
 import { GridCanvas } from './GridCanvas'
 import { usePageStore } from '@/store/usePageStore'
+import type { PageLayout } from '@/types/layout'
 
 /**
  * Página pública de la app - componentes en modo read-only con grid layout
  */
 export default function PublicPageRenderer({
-  appSlug,
-  pageSlug,
+  initialLayout,
 }: {
-  appSlug: string
-  pageSlug: string
+  initialLayout: PageLayout
 }) {
   const { setLayout, setLoading, setError, error } =
     usePageStore()
 
   useEffect(() => {
-    const fetchLayout = async () => {
-      try {
-        setLoading(true)
-        const res = await fetch(
-          `/api/public/apps/${appSlug}/pages/${pageSlug}/layout`
-        )
-
-        if (!res.ok) {
-          throw new Error('Error al cargar la página')
-        }
-
-        const data = await res.json()
-        setLayout(data)
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Error desconocido'
-        setError(message)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchLayout()
-  }, [appSlug, pageSlug, setLayout, setLoading, setError])
+    setError(null)
+    setLoading(false)
+    setLayout(initialLayout)
+  }, [initialLayout, setLayout, setLoading, setError])
 
   if (error) {
     return (
